@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from os import _exit
 import sys
 import time
@@ -9,6 +11,7 @@ def sigmoid(x):
     return 1/(1+np.exp(-x))
 
 def PreProcessBasis(basis):
+    ''' preprocess basis matrix to normalize column vectors'''
     N,M = np.shape(basis)
     scale = np.sqrt(np.sum(np.multiply(basis, basis), 0))
     scale[scale==0] = 1
@@ -18,6 +21,7 @@ def PreProcessBasis(basis):
 
 Likelihoods = {'GAUSSIAN':1, 'BERNOULLI':2, 'POISSON':3}
 def getLikelihood(likelihood_str):
+    ''' set likelihood type'''
     try:
         Likelihood = Likelihoods[likelihood_str.upper()]
     except KeyError:
@@ -26,6 +30,7 @@ def getLikelihood(likelihood_str):
     return Likelihood
     
 def ParamSet(**argin):
+    ''' if user defines some parameters, set them here '''
     settings = {}
     settings['relevant'] = set()
     settings['mu'] = None
@@ -48,6 +53,7 @@ def ParamSet(**argin):
     return settings
 
 def OptionSet(**argin):
+    ''' user options to restrict the model and computation '''
     options = {}
     options['fixedNoise'] = False
     options['freeBasis'] = set()
@@ -102,6 +108,7 @@ def OptionSet(**argin):
     return options
 
 def Diagnostics(options, level, msg = None, **argin):
+    ''' print the situation of model during training '''
     def isnum(value):
         try:
             value=value+1
@@ -129,6 +136,7 @@ def Diagnostics(options, level, msg = None, **argin):
     #return options
 
 def Initialization(likelihood, basis, targets, settings, options):
+    ''' initialize parameters and hyper parameters of the model '''
     GAUSSIAN_SNR_INIT = 0.1
     INIT_ALPHA_MAX = 1e3
     INIT_ALPHA_MIN = 1e-3
@@ -210,6 +218,10 @@ def Initialization(likelihood, basis, targets, settings, options):
     return Likelihood, Basis, Scale, alpha, beta, mu, Phi, used, order
 
 def ControlSet():
+    ''' 
+        some threshold values related to iteration stopping conditions and
+        update necessasities
+    '''
     controls = {}
     controls['ZeroFactor'] = 1e-12
     controls['MinDeltaLogAlpha'] = 1e-3
@@ -306,6 +318,7 @@ def PosteriorMode(Likelihood, Basis, targets, alpha, mu, iterMax,\
 
 def updateStats(Likelihood, Basis, Phi, targets, order, alpha, beta, mu,\
         Basis_Phi, Basis_targets, options):
+    ''' update related statistics after a modification is performed '''
     MAX_POSTMODE_ITER = 25
     N = np.shape(Basis)[0]
     Mt = np.shape(Phi)[1]
@@ -349,7 +362,6 @@ def updateStats(Likelihood, Basis, Phi, targets, order, alpha, beta, mu,\
     Q_out = Q_in.copy()
     index = order
     tmp = alpha-S_in[index]
-    #print(np.multiply(alpha,S_in[index]))
     S_out[index] = np.divide(np.multiply(alpha,S_in[index]), tmp)
     Q_out[index] = np.divide(np.multiply(alpha,Q_in[index]), tmp)
     factor = np.power(Q_out,2) - S_out
@@ -358,6 +370,7 @@ def updateStats(Likelihood, Basis, Phi, targets, order, alpha, beta, mu,\
            gamma, b_Basis_Phi, beta
 
 def Bayesian(likelihood, basis, targets, settings = None, options = None):
+    ''' main model configuration and training '''
     if not settings:
         settings = ParamSet()
     if not options:
@@ -436,6 +449,7 @@ def Bayesian(likelihood, basis, targets, settings = None, options = None):
             Action[index] = ACTION['delete']
 
         '''     find vectors needing addition       '''
+
         index = set([i for i in range(M_f) if factor[i]>controls['ZeroFactor']])-used
         if controls['BasisAlignmentTest']:
             index -= set(aligned_out.ravel().tolist())
@@ -455,7 +469,7 @@ def Bayesian(likelihood, basis, targets, settings = None, options = None):
             if flag_delete and not controls['AdditionPriority']:
                 deltaML[Action==ACTION['add']] = 0
         
-        '''find the most significant update to decide next step'''
+        ''' find the most significant update to decide next step '''
 
         deltaLogMarginal = np.max(deltaML)
         nu = np.argmax(deltaML)
@@ -480,6 +494,10 @@ def Bayesian(likelihood, basis, targets, settings = None, options = None):
             selectedAction = ACTION['terminate']
             act = 'Potential Termination'
         
+        ''' 
+            check if the candidate vector is close to existed basis in term of
+            Euclidean metric
+        '''
         if controls['BasisAlignmentTest']:
             if selectedAction == ACTION['add']:
                 p = phi.T*Phi
@@ -501,6 +519,8 @@ def Bayesian(likelihood, basis, targets, settings = None, options = None):
                     aligned_out = np.delete(aligned_out, aligned_pos, axis=0)
                     Diagnostics(options, 3, 'Alignment reinstated')
 
+        ''' perform modification according to selected action '''
+        
         update_required = False
         if selectedAction == ACTION['reestimate']:
             old_alpha = alpha[j].copy()
@@ -639,6 +659,8 @@ def Bayesian(likelihood, basis, targets, settings = None, options = None):
                 Diagnostics(options, 2, '%4d>\tL=%.6f\tgamma=%.2f(M=%d)'\
                         %(it, logML/N, np.sum(gamma), Mt))
             break
+        
+        ''' check the stop condition of main iteration '''
 
         ITER_LIMIT = it==options['max_iter']
         TIME_LIMIT = (time.time()-t_start)>=options['max_time']
