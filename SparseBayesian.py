@@ -258,7 +258,7 @@ def PosteriorMode(Likelihood, Basis, targets, alpha, mu, iterMax,\
     GRAD_MIN = 1e-6
     STEP_MIN = 1/(2**8)
     Mt = np.shape(Basis)[1]
-    A = np.diag(alpha)
+    A = np.diag(alpha.ravel().tolist())
     Basis_Mu = Basis*mu
     dataError, y = DataError(Likelihood, Basis_Mu, targets)
     regularizer = (alpha.T*np.power(mu, 2))/2
@@ -270,6 +270,7 @@ def PosteriorMode(Likelihood, Basis, targets, alpha, mu, iterMax,\
         errorLog[it, 0] = totalError
         Diagnostics(options, 4, 'PosteriorMode Cycle:%2d\terror:%.6f'\
                 %(it, totalError))
+        #solve for gradient of objective function
         e = targets-y
         g = Basis.T*e - np.multiply(alpha,mu)
         if Likelihood == Likelihoods['BERNOULLI']:
@@ -292,7 +293,9 @@ def PosteriorMode(Likelihood, Basis, targets, alpha, mu, iterMax,\
             Diagnostics(options, 4, 'PosteriorMode Convergence (<1e-6) after\
                     %d iterations'% it)
             break
-        delta_mu = np.linalg.solve(L.T,np.linalg.solve(L, g))
+        #solve for newton direction
+        delta_mu = np.linalg.solve(U.T,np.linalg.solve(U, g))
+        #start second-order newton iteration
         step = 1.0
         while step > STEP_MIN:
             mu_new = mu + step*delta_mu
